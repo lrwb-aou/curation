@@ -57,8 +57,7 @@ SOURCE_DATASET=$([[ "${SOURCE_APPLICATION_ID}" ]] && echo "${SOURCE_APPLICATION_
 TARGET_DATASET=$([[ "${TARGET_APPLICATION_ID}" ]] && echo "${TARGET_APPLICATION_ID}:${TARGET_DATASET}" || echo "${TARGET_DATASET}")
 
 # Copy the tables
-#( [[ "${SOURCE_PREFIX}" ]] && grep ${SOURCE_PREFIX} || cat )) essentially is and if/else statement
-# if SOURCE_PREFIX is not empty then grep for SOURCE_PREFIX else CAT the input
+# Tables beginning with underscore "_" are skipped
 for t in $(bq ls -n 2000 ${SOURCE_DATASET} |
            grep TABLE |
            awk '{print $1}' |
