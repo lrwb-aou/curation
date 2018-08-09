@@ -164,12 +164,10 @@ class Shift(Policy):
                 
         
     """
-    OBSERVATION_DATES = 'Date|YoutubeVideos_RiskToPrivacy|YoutubeVideos_WhatAreWeAsking|ExtraConsent_(' \
-                        '.*Video$|Fitness|Health)'
-
-    def __init__(self, **args):
-        Policy.__init__(self, **args)
-
+    OBSERVATION_DATES = 'Date|YoutubeVideos_RiskToPrivacy|YoutubeVideos_WhatAreWeAsking|ExtraConsent_(.*Video$|Fitness|Health)'
+    def __init__(self,**args):
+        Policy.__init__(self,**args)
+        
         self.concept_sql = """
                 SELECT concept_code from :dataset.concept
                 WHERE vocabulary_id = ':vocabulary_id' AND REGEXP_CONTAINS(concept_code,'(Date|DATE|date)') is TRUE
@@ -217,25 +215,18 @@ class Shift(Policy):
                     # @NOTE: The date-shifting here is redundant, but it's an artifact of mixing relational &
                     # meta-model in the database
                     #
-
-                    shifted_date = """CAST( DATE_SUB(CAST( CAST(:name AS TIMESTAMP) AS DATE), INTERVAL
-                    (select date_shift from :i_dataset.people_seed xii where xii.person_id = :table.person_id) DAY) AS
-                    STRING) as :name """
-                    shifted_date = shifted_date.replace(":name", "value_as_string").replace(":i_dataset",
-                                                                                            dataset).replace(":table",
-                                                                                                             "x")
-                    sql_fields = self.__get_shifted_fields(fields, dataset, "x")
-                    # --AND person_id = 562270
+                   
+                    shifted_date = """CAST( DATE_SUB(CAST( CAST(:name AS TIMESTAMP) AS DATE), INTERVAL date_diff( CAST(CAST(:name AS TIMESTAMP) AS DATE),(select anchor from :i_dataset.people_seed xii where xii.person_id = :table.person_id),DAY) DAY) AS STRING) as :name """
+                    shifted_date = shifted_date.replace(":name","value_as_string").replace(":i_dataset",dataset).replace(":table","x")
+                    sql_fields = self.__get_shifted_fields(fields,dataset,"x")
+                    #--AND person_id = 562270
                     sql_filter = "|".join(Policy.TERMS.OBSERVATION_FILTERS.values())
 
-                    _sql = """SELECT :shifted_date,person_id, :shifted_fields :fields FROM :i_dataset.observation x
-                     WHERE REGEXP_CONTAINS(trim(observation_source_value),':pattern')"""
-                    _sql = _sql.replace(":shifted_fields", ",".join(sql_fields)).replace(":shifted_date",
-                                                                                         shifted_date).replace(
-                        ":i_dataset", dataset).replace(":pattern", Shift.OBSERVATION_DATES)
+                    _sql = """SELECT :shifted_date,person_id, :shifted_fields :fields FROM :i_dataset.observation x WHERE REGEXP_CONTAINS(trim(observation_source_value),':pattern')"""
+                    _sql = _sql.replace(":shifted_fields",",".join(sql_fields)).replace(":shifted_date",shifted_date).replace(":i_dataset",dataset).replace(":pattern",Shift.OBSERVATION_DATES)
 
-                    self.policies[name]["union"] = {"sql": _sql, "fields": union_fields, "shifted_values": sql_fields}
-
+                    self.policies[name]["union"] = {"sql":_sql,"fields":union_fields,"shifted_values":sql_fields}
+                    
                     # self.policies[name]['meta'] = 'foo'
                 #
                 # @TODO: Log the results of the propositional logic operation (summarized)
@@ -368,8 +359,8 @@ class DropFields(Policy):
                     # As a result of filtering out the above fields, we need to run a cascading Unions of which each
                     # will have its dates shifted.
                     #
-                    codes = "'" + "','".join(self.concept_class_id) + "'"
-                    sql_filter = Shift.OBSERVATION_DATES + "|" + "|".join(Policy.TERMS.OBSERVATION_FILTERS.values())
+                    codes = "'"+"','".join(self.concept_class_id)+"'"
+                    sql_filter = Shift.OBSERVATION_DATES+"|"+ "|".join(Policy.TERMS.OBSERVATION_FILTERS.values())
                     #
                     # @Log: We are logging here the operaton that is expected to take place
                     # {"action":"drop-fields","input":sql_filter,"subject":table,"object":"rows"}
@@ -837,9 +828,16 @@ def initialization(client, dataset):
 
         # Create the date shift
         sql = """    
-        SELECT person_id, CAST(CEIL(365*rand()) AS INT64) as date_shift
-        FROM :i_dataset.person 
-        """.replace(":i_dataset", dataset)
+        
+        SELECT person_id, DATE_SUB( MAX(CAST(value_as_string as DATE)) , INTERVAL CAST (365*rand() AS INT64) DAY) as anchor
+        FROM :i_dataset.observation WHERE observation_source_value = 'ExtraConsent_TodaysDate' 
+        GROUP BY person_id
+
+        UNION ALL
+        SELECT person_id, DATE_SUB(CURRENT_DATE , INTERVAL CAST (365*rand() AS INT64) DAY) as anchor
+        FROM :i_dataset.observation WHERE person_id not in (SELECT person_id FROM :i_dataset.observation WHERE observation_source_value = 'ExtraConsent_TodaysDate' GROUP BY person_id)
+        GROUP BY person_id
+        """.replace(":i_dataset",dataset)
         job = bq.QueryJobConfig()
         job.destination = client.dataset(dataset).table("people_seed")
         job.use_query_cache = True
@@ -856,13 +854,12 @@ def wait(client, job_id):
         if client.get_job(job_id).state == 'DONE':
             break
         else:
-
+            
             time.sleep(5)
         pass
-    Logging.log(subject="composer", object="deid", action="awakening", value=job_id)
-
-
-def finalize(**args):  # client,i_dataset, o_dataset,table,o_table,fields):
+    Logging.log(subject="composer",object="deid",action="awakening",value=job_id)
+    
+def finalize(**args): #client,i_dataset, o_dataset,table,o_table,fields):
     """
         This function is designed or intended to finalize the import process by insuring the tables are adequately
         structured
@@ -873,14 +870,14 @@ def finalize(**args):  # client,i_dataset, o_dataset,table,o_table,fields):
         @param o_dataset  output dataset
         @param table      target table name
     """
-    client = args['client']
-    i_dataset = args['i_dataset']
-    i_table = args['i_table']
-    o_dataset = args['o_dataset']
-    o_table = args['o_table']
-    fields = args['fields']
+    client      = args['client']
+    i_dataset   = args['i_dataset']
+    i_table     = args['i_table']
+    o_dataset   = args['o_dataset']
+    o_table     = args['o_table']
+    fields      = args['fields']
     ischema = client.get_table(client.dataset(i_dataset).table(i_table)).schema
-    table = client.get_table(client.dataset(o_dataset).table(o_table))
+    table   = client.get_table(client.dataset(o_dataset).table(o_table))
     ischema_size = len(ischema)
 
     newfields = [bq.SchemaField(name=field.name, field_type=field.field_type) for field in ischema if
@@ -935,14 +932,12 @@ if __name__ == '__main__':
     #   - Initialize class level parameters
     #
     CONSTANTS = SYS_ARGS['config']['constants']
-
-    account_path = CONSTANTS['service-account-path'] if 'service_account' not in SYS_ARGS else SYS_ARGS[
-        'service_account']
-    Policy.TERMS.SEXUAL_ORIENTATION_NOT_STRAIGHT = CONSTANTS['sexual-orientation']['not-straight']
-    Policy.TERMS.SEXUAL_ORIENTATION_STRAIGHT = CONSTANTS['sexual-orientation']['straight']
-    Policy.TERMS.OBSERVATION_FILTERS = CONSTANTS['observation-filter']
-    Policy.TERMS.BEGIN_OF_TIME = '1980-07-21' if 'begin-of-time' not in CONSTANTS['begin-of-time'] else CONSTANTS[
-        'begin-of-time']
+    
+    account_path = CONSTANTS['service-account-path'] if 'service_account' not in SYS_ARGS else SYS_ARGS['service_account']
+    Policy.TERMS.SEXUAL_ORIENTATION_NOT_STRAIGHT= CONSTANTS['sexual-orientation']['not-straight']
+    Policy.TERMS.SEXUAL_ORIENTATION_STRAIGHT    = CONSTANTS['sexual-orientation']['straight']
+    Policy.TERMS.OBSERVATION_FILTERS            = CONSTANTS['observation-filter']
+    Policy.TERMS.BEGIN_OF_TIME = '1980-07-21' if 'begin-of-time' not in CONSTANTS['begin-of-time'] else CONSTANTS['begin-of-time']
     client = bq.Client.from_service_account_json(account_path)
 
     #
@@ -998,12 +993,10 @@ if __name__ == '__main__':
     #
     # Let's get basic project of fields and provide a prefix to the query
     #
-    fields = r['dropfields']['fields'] if 'dropfields' in r else []
+    fields  =  r['dropfields']['fields'] if 'dropfields' in r else []
     # sql     = "SELECT :parent_fields FROM ("+r['dropfields']['sql']+") a"
-    sql = r['dropfields']['sql'] if 'dropfields' in r else 'SELECT * from :i_dataset.:table'.replace(':i_dataset',
-                                                                                                     i_dataset).replace(
-        ":table", table)
-
+    sql = r['dropfields']['sql'] if 'dropfields' in r else 'SELECT * from :i_dataset.:table'.replace(':i_dataset',i_dataset).replace(":table",table)
+    
     #
     # @Log: We are logging here the operaton that is expected to take place
     # {"action":"building-sql","input":fields,"subject":table,"object":""}
@@ -1147,87 +1140,76 @@ if __name__ == '__main__':
     # The following line is a hack that gets the clustering working
     # After looking into the source code, it would seem this is the best place to get it to work
     #
-    if 'person_id' in _fields and 'no-cluster' not in SYS_ARGS:
-        job._properties['query']['clustering'] = {'fields': ['person_id']}
+    if 'person_id' in _fields and 'no-cluster' not in SYS_ARGS :
+        job._properties['query']['clustering'] = {'fields':['person_id']}
     job.priority = 'BATCH' if 'filter' not in SYS_ARGS else 'INTERACTIVE'
 
     job.dry_run = True
     #
     # If the query can run, then we will proceed to creating the tables with partitioning on person and 
-    r = client.query(sql, location='US', job_config=job)
-    Logging.log(subject='composer', object=table, action='job.setup',
-                value={"priority": job.priority, "can.run": 1 * (r.errors is None)})
-    if r.errors is None and r.state == 'DONE':
+    r = client.query(sql,location='US',job_config=job)
+    Logging.log(subject='composer',object=table,action='job.setup',value={"priority":job.priority,"can.run":1*(r.errors is None) })
+    if r.errors is None and r.state == 'DONE' :
         #
         # DC-161
         # We are performing this run into a temporary location 
-        TMP_TABLE = '_tmp_' + SYS_ARGS['table']
+        TMP_TABLE = '_tmp_'+SYS_ARGS['table']
         job.destination = client.dataset(o_dataset).table(TMP_TABLE)
-        job.dry_run = False
-        r = client.query(sql, location='US', job_config=job)
+        job.dry_run= False
+        r = client.query(sql,location='US',job_config=job)
         #
         # @Log: We are logging here the operaton that is expected to take place
-        # {"action":"submit-sql","input":job.job_id,"subject":table,"object":{"status":job.state,
-        # "running""job.running}}
+        # {"action":"submit-sql","input":job.job_id,"subject":table,"object":{"status":job.state,"running""job.running}}    
 
-        # Logging.log(subject="composer",object=r.job_id,action="submit.job",value={"from":i_dataset+"."+table,
-        # "to":o_dataset})
-        Logging.log(subject="composer", object=r.job_id, action="submit.job",
-                    value={"from": i_dataset + "." + table, "to": (o_dataset + "." + TMP_TABLE)})
+        # Logging.log(subject="composer",object=r.job_id,action="submit.job",value={"from":i_dataset+"."+table,"to":o_dataset})
+        Logging.log(subject="composer",object=r.job_id,action="submit.job",value={"from":i_dataset+"."+table,"to":(o_dataset+"."+TMP_TABLE)})
         #
         # Once the job has been submitted we need to update the resultset with
         # @TODO Find a way to use add_done_callback
         #
-
-        wait(client, r.job_id)
+        
+        wait(client,r.job_id)
         out = client.get_job(r.job_id)
         if out.errors is None:
-            finalize(client=client, i_dataset=i_dataset, o_dataset=o_dataset, i_table=SYS_ARGS['table'],
-                     o_table=TMP_TABLE, fields=DROPPED_FIELDS)
+            finalize(client=client,i_dataset=i_dataset,o_dataset=o_dataset,i_table=SYS_ARGS['table'],o_table=TMP_TABLE,fields=DROPPED_FIELDS)
             #
             # At this point the temporary table is finalized and has all we need
             schema = client.get_table(client.dataset(o_dataset).table(TMP_TABLE)).schema
-            fields = [str(item.name) for item in schema if item.name != 'person_id']
+            fields = [ str(item.name) for item in schema if item.name != 'person_id']
             #
             # DC-161 
-            # We replace the person_id by the research id because it has the potential to affect filters for instance
-            # filtering by age.
+            # We replace the person_id by the research id because it has the potential to affect filters for instance filtering by age.
             # To avoid this we will do the following :
             #   - put the first run into a temporary  table
             #   - join the results of the temporary table into the final table
             #   - destroy the temporary table
             #  
-            if 'person_id' in _fields:
+            if 'person_id' in _fields :            
                 # CAUTION :
                 # DO NOT perform a direct join on people_seed, ROW_NUMBER() OVER() otherwise the records may NOT align!!
 
-                FINAL_SQL = """ SELECT p.id as person_id, :fields FROM :o_dataset.:tmp_table INNER JOIN (SELECT *
-                 FROM (SELECT ROW_NUMBER() OVER() * 1000 as id,person_id FROM :i_dataset.people_seed)) p ON 
-                p.person_id = :tmp_table.person_id"""
-                FINAL_SQL = FINAL_SQL.replace(":fields", ",".join(
-                    [field_name for field_name in fields if field_name != 'person_id'])).replace(":tmp_table",
-                                                                                                 TMP_TABLE).replace(
-                    ":o_dataset", o_dataset).replace(":i_dataset", i_dataset)
+
+                FINAL_SQL = """ SELECT p.id as person_id, :fields FROM :o_dataset.:tmp_table INNER JOIN (SELECT * FROM (SELECT ROW_NUMBER() OVER() * 1000 as id,person_id FROM :i_dataset.people_seed)) p ON p.person_id = :tmp_table.person_id"""
+                FINAL_SQL = FINAL_SQL.replace(":fields",",".join([field_name for field_name in fields if field_name != 'person_id']) ).replace(":tmp_table",TMP_TABLE).replace(":o_dataset",o_dataset).replace(":i_dataset",i_dataset)
             else:
-                FINAL_SQL = """select * from :o_dataset.:tmp_table""".replace(":o_dataset", o_dataset).replace(
-                    ":tmp_table", TMP_TABLE)
+                FINAL_SQL = """select * from :o_dataset.:tmp_table""".replace(":o_dataset",o_dataset).replace(":tmp_table",TMP_TABLE)
             job.destination = client.dataset(o_dataset).table(table)
             job.dry_run = False
-            out = client.query(FINAL_SQL, location='US', job_config=job)
-            Logging.log(subject='composer', object=out.job_id, action='submit.job',
-                        value={"from": (o_dataset + "." + TMP_TABLE), "to": (o_dataset + "." + SYS_ARGS['table'])})
-            wait(client, out.job_id)
-            finalize(client=client, i_dataset=o_dataset, o_dataset=o_dataset, i_table=TMP_TABLE,
-                     o_table=SYS_ARGS['table'], fields=DROPPED_FIELDS)
+            out = client.query(FINAL_SQL,location='US',job_config=job)
+            Logging.log(subject='composer',object=out.job_id,action='submit.job',value={"from":(o_dataset+"."+TMP_TABLE),"to":(o_dataset+"."+SYS_ARGS['table'])})
+            wait(client,out.job_id)
+            finalize(client=client,i_dataset=o_dataset,o_dataset=o_dataset,i_table=TMP_TABLE,o_table=SYS_ARGS['table'] ,fields = DROPPED_FIELDS)
             client.delete_table(client.dataset(o_dataset).table(TMP_TABLE))
-            Logging.log(subject='composer', object=TMP_TABLE, action='finalize',
-                        value={"from": (o_dataset + "." + TMP_TABLE), "to": (o_dataset + "." + SYS_ARGS['table'])})
+            Logging.log(subject='composer',object=TMP_TABLE,action='finalize',value={"from":(o_dataset+"."+TMP_TABLE),"to":(o_dataset+"."+SYS_ARGS['table'])})
     else:
         #
         # There is no need to run the query if it can't run upon evaluation
         # For dry_run to provide an estimate of the number of bytes it will process it must first evaluate query generated
         # If the evaluation of the query doesn't pass, we shouldn't run it at all.
         pass
+    
+    Logging.log(subject='composer',object=out.job_id,action='job.status',value='SUCCESS' if out.errors is None else 'FAILURE')
+    #
 
     Logging.log(subject='composer', object=out.job_id, action='job.status',
                 value='SUCCESS' if out.errors is None else 'FAILURE')
