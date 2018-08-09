@@ -164,7 +164,7 @@ class Shift(Policy):
                 
         
     """
-    OBSERVATION_DATES = 'Date|YoutubeVideos_RiskToPrivacy|YoutubeVideos_WhatAreWeAsking|ExtraConsent_(.*Video$|Fitness|Health)'
+    OBSERVATION_DATES = 'Date|date|DATE|ExtraConsent_(.*Video$|Fitness|Health)'
     def __init__(self,**args):
         Policy.__init__(self,**args)
         
@@ -215,15 +215,32 @@ class Shift(Policy):
                     # @NOTE: The date-shifting here is redundant, but it's an artifact of mixing relational &
                     # meta-model in the database
                     #
-                   
+                    # begin_of_time = datetime.strptime(Policy.TERMS.BEGIN_OF_TIME,'%Y-%m-%d')
+                    # year = int(datetime.now().strftime("%Y"))  - begin_of_time.year
+                    # month = begin_of_time.month
+                    # day = begin_of_time.day
+                    # shifted_date = """CAST(DATE_SUB( DATE_SUB(DATE_SUB( CAST(:name AS DATE),INTERVAL :year YEAR),INTERVAL :month MONTH),INTERVAL :day DAY) AS STRING) as :name""".replace(':name',"value_as_string").replace(":year",str(year)).replace(":month",str(month)).replace(":day",str(day))
+                    
+                    # shifted_field = """
+                    #     CAST(
+                    #     date_sub((SELECT CAST(value_as_string as DATE) FROM :i_dataset.observation ii where ii.person_id = person_id and observation_source_value='ExtraConsent_TodaysDate' limit 1) , INTERVAL 
+                    #     date_diff(:name, (SELECT seed from :i_dataset.people_seed ii where ii.person_id = person_id), DAY) DAY) AS STRING) as :name
+                    # """.replace(":name","value_as_string")
+                    # shifted_date = """CAST( DATE_SUB( CAST(:name AS DATE), INTERVAL (SELECT seed from :i_dataset.people_seed xii WHERE xii.person_id = :table.person_id) DAY) AS STRING) as :name"""
                     shifted_date = """CAST( DATE_SUB(CAST( CAST(:name AS TIMESTAMP) AS DATE), INTERVAL date_diff( CAST(CAST(:name AS TIMESTAMP) AS DATE),(select anchor from :i_dataset.people_seed xii where xii.person_id = :table.person_id),DAY) DAY) AS STRING) as :name """
                     shifted_date = shifted_date.replace(":name","value_as_string").replace(":i_dataset",dataset).replace(":table","x")
                     sql_fields = self.__get_shifted_fields(fields,dataset,"x")
                     #--AND person_id = 562270
                     sql_filter = "|".join(Policy.TERMS.OBSERVATION_FILTERS.values())
-
-                    _sql = """SELECT :shifted_date,person_id, :shifted_fields :fields FROM :i_dataset.observation x WHERE REGEXP_CONTAINS(trim(observation_source_value),':pattern')"""
-                    _sql = _sql.replace(":shifted_fields",",".join(sql_fields)).replace(":shifted_date",shifted_date).replace(":i_dataset",dataset).replace(":pattern",Shift.OBSERVATION_DATES)
+                    # _sql = """
+                    # SELECT :shifted_date,person_id, :shifted_fields :fields
+                    # FROM :i_dataset.observation x where observation_source_value in (
+                    #     SELECT concept_code from :i_dataset.concept WHERE REGEXP_CONTAINS(concept_code,'Date|DATE|date') IS TRUE
+                    #     AND REGEXP_CONTAINS(concept_code,'(:filter)') IS FALSE
+                    # )
+                    # """.replace(":i_dataset",dataset).replace(":shifted_fields",",".join(sql_fields)).replace(":shifted_date",shifted_date).replace(":filter",sql_filter)
+                    _sql = """SELECT :shifted_date,person_id, :shifted_fields :fields FROM :i_dataset.observation x WHERE REGEXP_CONTAINS(trim(observation_source_value),'Date|date|DATE|ExtraConsent_(.*Video$|Fitness|Health)')"""
+                    _sql = _sql.replace(":shifted_fields",",".join(sql_fields)).replace(":shifted_date",shifted_date).replace(":i_dataset",dataset)
 
                     self.policies[name]["union"] = {"sql":_sql,"fields":union_fields,"shifted_values":sql_fields}
                     
