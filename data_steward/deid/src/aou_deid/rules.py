@@ -4,104 +4,130 @@
 
     The de-identification code applies to both the projection and filters (relational algebra terminology).
     The code will apply to both relational tables or meta-tables (alternative to relational modeling).
-    
-    Rules are expressed in JSON format with limited vocabulary and largely based on templates for every persistent data-store
-    We have rules stored in one-place and the application of rules in another. This will allow for rules to be able to be shared
-    
+
+    Rules are expressed in JSON format with limited vocabulary and largely based
+    on templates for every persistent data-store.
+    We have rules stored in one-place and the application of rules in another.
+    This will allow for rules to be able to be shared.
+
     Shifting:
         We shift dates given a random function or given a another table that has the number of days for the shift
     Generalization
         Rules for generalization are applied on a projected set of tuples and can have an conditions
     Suppression:
-        Suppression rules apply to tuples provided a relational table and/or rows 
+        Suppression rules apply to tuples provided a relational table and/or rows
     Compute :
-        We have added this feature as a result of uterly poor designs we have encountered that has computed fields stored
+        We have added this feature as a result of uterly poor designs we have
+        encountered that has computed fields stored
 """
 import numpy as np
-import pandas as pd
+
 from parser import Parse
 
-class Rules :
-    COMPUTE={
-        "year":"EXTRACT (YEAR FROM :FIELD) AS :FIELD",
-        "month":"EXTRACT (MONTH FROM :FIELD) AS :FIELD",
-        "day":"EXTRACT (DAY FROM :FIELD) AS :FIELD",
-        "id":"SELECT :FIELD FROM :table where :key_field = :key_value"
+class Rules(object):
+    COMPUTE = {
+        "year": "EXTRACT (YEAR FROM :FIELD) AS :FIELD",
+        "month": "EXTRACT (MONTH FROM :FIELD) AS :FIELD",
+        "day": "EXTRACT (DAY FROM :FIELD) AS :FIELD",
+        "id": "SELECT :FIELD FROM :table where :key_field = :key_value",
     }
+
     def __init__(self):
         self.cache = {}
         self.store_syntax = {
 
-            "sqlite":{
-                "apply":{"REGEXP":"LOWER(:FIELD) REGEXP LOWER(':VAR')","COUNT":"SELECT COUNT(DISTINCT :FIELD) FROM :TABLE WHERE :KEY=:VALUE"},
-                "cond_syntax":{"IF":"CASE WHEN","OPEN":"", "THEN":"THEN","ELSE":"ELSE","CLOSE":"END"},
-                "random":"random() % 365 "
+            "sqlite": {
+                "apply": {
+                    "REGEXP": "LOWER(:FIELD) REGEXP LOWER(':VAR')",
+                    "COUNT": "SELECT COUNT(DISTINCT :FIELD) FROM :TABLE WHERE :KEY=:VALUE"
+                },
+                "cond_syntax": {
+                    "IF":"CASE WHEN",
+                    "OPEN":"",
+                    "THEN":"THEN",
+                    "ELSE":"ELSE",
+                    "CLOSE":"END",
+                },
+                "random": "random() % 365 "
             },
-            "bigquery":{
-                "apply":{"REGEXP":"REGEXP_CONTAINS (LOWER(:FIELD), LOWER(':VAR'))","COUNT":"SELECT COUNT (DISTINCT :KEY) FROM :TABLE WHERE :KEY=:VALUE"},
-                "cond_syntax":{"IF":"IF","OPEN":"(","THEN":",","ELSE":",","CLOSE":")"},
-                "random":"CAST( (RAND() * 364) + 1 AS INT64)"
+            "bigquery": {
+                "apply": {
+                    "REGEXP": "REGEXP_CONTAINS (LOWER(:FIELD), LOWER(':VAR'))",
+                    "COUNT": "SELECT COUNT (DISTINCT :KEY) FROM :TABLE WHERE :KEY=:VALUE",
+                },
+                "cond_syntax": {
+                    "IF": "IF",
+                    "OPEN": "(",
+                    "THEN": ", ",
+                    "ELSE": ", ",
+                    "CLOSE": ")",
+                },
+                "random": "CAST( (RAND() * 364) + 1 AS INT64)"
             },
-            "postgresql":{
-                
-                "cond_syntax":{"IF":"CASE WHEN","OPEN":"","THEN":"THEN","ELSE":"ELSE","CLOSE":"END"},
-                "shift":{"date":"FIELD INTERVAL 'SHIFT DAY' ","datetime":"FIELD INTERVAL 'SHIFT DAY'"},
-                "random":"(random() * 364) + 1 :: int"
+            "postgresql": {
+                "cond_syntax": {
+                    "IF": "CASE WHEN",
+                    "OPEN": "",
+                    "THEN": "THEN",
+                    "ELSE": "ELSE",
+                    "CLOSE": "END",
+                },
+                "shift": {
+                    "date": "FIELD INTERVAL 'SHIFT DAY' ",
+                    "datetime": "FIELD INTERVAL 'SHIFT DAY'",
+                },
+                "random": "(random() * 364) + 1 :: int"
             }
         }
         self.cache['compute'] = Rules.COMPUTE
-        
-    def set(self,key, id, **args) :
-        if key not in ['generalize','suppress','compute','shift'] :
-            raise (key + " is Unknown, [suppress,generalize,compute,shift] are allowed")
-        if key not in self.cache :
-            self.cache[key] = {}
-        if id not in self.cache[key] :
-            self.cache[key][id] = []
-        
-        self.cache[key][id].append(args)
-        
-    def get (self,key,id) :
-        return self.cache[key][id]
-   
-    def validate(self,id,entry):
-        """
-        Validating if a the application of a rule relative to a table is valid
-        """
-        p = id in self.cache
-        
-        # if not p :
-        #     return False
-        q = []
-        # r = []  #-- payload
-        
-        for row in entry :
-            
-            if 'rules' in row  :
-                if not isinstance(row['rules'],list) and row['rules'].startswith('@')  and "into" in row:
-                    #
-                    # Making sure the expression is {apply,into} suggesting a rule applied relative to an attribute
-                    # finding the rules that need to be applied to a given attribute
-                    _id,_key = row['rules'].replace('@','').split('.')
-                    q.append( (_id == id) and (_key in self.cache[id]) )
-                else :
 
+    def set(self, key, rule_id, **args):
+        if key not in ['generalize', 'suppress', 'compute', 'shift']:
+            raise (key + " is Unknown, [suppress, generalize, compute, shift] are allowed")
+
+        if key not in self.cache:
+            self.cache[key] = {}
+
+        if rule_id not in self.cache[key]:
+            self.cache[key][rule_id] = []
+
+        self.cache[key][rule_id].append(args)
+
+    def get(self, key, rule_id):
+        return self.cache[key][rule_id]
+
+    def validate(self, rule_id, entry):
+        """
+        Validating if the application of a rule relative to a table is valid
+        """
+        p = rule_id in self.cache
+
+        q = []
+
+        for row in entry:
+
+            if 'rules' in row:
+                row_rules = row.get('rules', '')
+                if not isinstance(row_rules, list) and row_rules.startswith('@')  and "into" in row:
+                    #
+                    # Making sure the expression is {apply, into} suggesting a
+                    # rule applied relative to an attribute
+                    # finding the rules that need to be applied to a given attribute
+                    _id, _key = row_rules.replace('@', '').split('.')
+                    q.append((_id == rule_id) and (_key in self.cache[rule_id]))
+                else:
                     q.append(1)
-                # args = dict({"into",row['into']},**{"apply":self.cache[id][_key]})
-                # args =  dict({"into":row['into']} ,**{"apply":self.cache[id][_key]})
-                # r.append({"pointer":getattr(self,id),"args":args})
-            elif 'rules' not in row and isinstance(row,list) or not p:
+            elif isinstance(row, list) or not p:
                 #
                 # assuming we are dealing with a list of strings applied
                 # and dealign with self contained rules
                 q.append(1)
-                # r.append(row['apply'])
-       
+
         q = sum(q) == len(q)
-        
+
         return (p and q) or (not p and q)
 
-class deid (Rules):
+class Deid(Rules):
     """
     This class is designed to apply rules to structured data. For this to work we consider the following:
         - a rule can be applied to many fields and tables (broadest sense)
@@ -111,203 +137,193 @@ class deid (Rules):
     def __init__(self):
         Rules.__init__(self)
 
-    def validate(self,id,info):
+    def validate(self, rule_id, entry):
         payload = None
-        
-        if Rules.validate(self,id,info) :
-            
-            payload = {}
-            payload = {"args":[]}
-            payload["pointer"]=getattr(self,id)
-            for row in info :
-                
-                #
-                # @TODO: Insure that an error is thrown if the rule associated is not found
 
-                p = getattr(Parse,id)(row,self.cache) 
-                payload['args'] += [p]    
-             
+        if super(Deid, self).validate(rule_id, entry):
+
+            payload = {}
+            payload = {"args": []}
+            payload["pointer"] = getattr(self, rule_id)
+            for row in entry:
+
+                #
+                # @TODO: Ensure that an error is thrown if the rule associated is not found
+
+                p = getattr(Parse, rule_id)(row, self.cache)
+                payload['args'] += [p]
+
         return payload
-    def aggregate(self,sql,**args):
+
+    def aggregate(self, sql, **args):
         pass
-    def log (self,**args):
-        print (args)        
-    def generalize(self,**args):
+
+    def log(self, **args):
+        print (args)
+
+    def generalize(self, **args):
         """
-        This function will apply generalization given a set of rules provided. the rules apply to both meta tables and relational tables
+        This function will apply generalization given a set of rules provided.
+
+        The rules apply to both meta tables and relational tables
+
         :fields list of target fields
         :rules  list of rules to be applied
         :label  context of what is being generalized
         """
-        fields = args['fields'] if 'fields' in args else [args['value_field']]
-        label = args['label']
-        rules = args['rules']
-        
-       
-        store_id = args['store'] if 'store' in args else 'sqlite'
-        SYNTAX = self.store_syntax[store_id]['cond_syntax']
-        APPLY_FN = self.store_syntax[store_id]['apply'] if 'apply' in self.store_syntax[store_id] else {}
-        # COND_PREFIX = 'CASE WHEN'
-        # COND_SUFFIX = 'END'
-        r = {}
+        fields = args.get('fields', [args.get('value_field', '')])
+        label = args.get('label', '')
+        rules = args.get('rules', '')
+
+
+        store_id = args.get('store', 'sqlite')
+        syntax = self.store_syntax.get(store_id, 'sqlite').get('cond_syntax', {})
         out = []
-        label = args['label']
-        for name in fields :
-            syntax = []
+        label = args.get('label', '')
+        for name in fields:
             cond = []
-            for rule in rules :
-                qualifier = rule['qualifier'] if 'qualifier' in rule else ''
-                if 'apply' in rule :
+            for rule in rules:
+                qualifier = rule.get('qualifier', '')
+                if 'apply' in rule:
                     #
                     # This will call a built-in SQL function (non-aggregate)'
-                    # qualifier = rule['qualifier'] if 'qualifier' in rule else ''
-                    filter = args['filter'] if 'filter' in args else name
-                    self.log(module='generalize',label=label.split('.')[1],on=name,type=rule['apply'])
-                    if 'apply' not in self.store_syntax[store_id] :
-                        #
-                        #
-                        
-                        regex =  [rule['apply'],"(",filter, " , '","|".join(rule['values']), "') ",qualifier] 
-                        # (rule['values'])
-                        # cond += [ " ".join([SYNTAX['IF'],regex])+SYNTAX['OPEN'],SYNTAX['THEN'],_into]
-                                      
-                    else :
+                    # qualifier = rule.get('qualifier', '')
+                    fillter = args.get('filter', name)
+                    self.log(module='generalize', label=label.split('.')[1], on=name, type=rule.get('apply', ''))
 
-                        TEMPLATE = self.store_syntax[store_id]['apply'][rule['apply']]
-                        regex = TEMPLATE.replace(':FIELD',filter).replace(':FN',rule['apply'])
-                        if ':VAR' in TEMPLATE :
-                            regex = regex.replace(":VAR","|".join(rule['values']))
-                        if rule['apply'] in ['COUNT','AVG','SUM'] :
+                    if 'apply' not in self.store_syntax[store_id]:
+                        regex = [rule.get('apply', ''),
+                                 "(",
+                                 fillter,
+                                 " , '",
+                                 "|".join(rule.get('values', [])),
+                                 "') ",
+                                 qualifier]
+                    else:
+                        application_rule = rule.get('apply', '')
+                        template = self.store_syntax.get(store_id, {})
+                        template = template.get('apply', {})
+                        template = template.get(application_rule, '')
+                        regex = template.replace(':FIELD', fillter)
+                        regex = regex.replace(':FN', rule.get('apply', ''))
+                        if ':VAR' in template:
+                            regex = regex.replace(":VAR", "|".join(rule.get('values', [])))
+                        if rule.get('apply', '') in ['COUNT', 'AVG', 'SUM']:
                             #
-                            # We are dealing with an aggregate expression. At this point it is important to know what we are counting
-                            # count(:field) from :table [where filter]
+                            # We are dealing with an aggregate expression.
+                            # At this point it is important to know what we are counting
+                            # count(:field) from :table [where fillter]
                             #
-                            
-                            
-                            regex = regex.replace(':TABLE',args['table']).replace(':KEY',args['key_field']).replace(':VALUE',args['value_field'])
-                            # regex = regex.replace(':TABLE',args['table']).replace(':KEY',args['key_field']).replace(':VALUE',args['value_field'])
-                            
-                            if 'on' in rule and 'key_row' in args :
-                                if 'qualifier' in rule :                                    
-                                    regex += ' AND '+args['key_row'] +  " IN ('"+"','".join(rule['on'])+"')"
-                                else:
-                                    regex += ' WHERE '+args['key_row'] +  " IN ('"+"','".join(rule['on'])+"')"
-                                
-                            regex = ' '.join(['(',regex,')',qualifier])
+                            regex = regex.replace(':TABLE', args.get('table', ''))
+                            regex = regex.replace(':KEY', args.get('key_field', ''))
+                            regex = regex.replace(':VALUE', args.get('value_field', ''))
+
+                            if 'on' in rule and 'key_row' in args:
+                                regex += ' AND ' if 'qualifier' in rule else ' WHERE '
+                                regex += args.get('key_row', '') + " IN ('" + "', '".join(rule.get('on', [])) + "')"
+
+                            regex = ' '.join(['(', regex, ')', qualifier])
                         else:
-                            regex = ' '.join([regex,qualifier])
+                            regex = ' '.join([regex, qualifier])
                         #
                         # Is there a filter associated with the aggregate function or not
-                        # 
-                        
+                        #
 
-                    
-                    # _into = "".join(["'",rule['into'],"'"])       
-                    _into = rule['into'] if 'into' not in args else args['into']
-                    
-                    if not _into.isnumeric() :
-                        
-                        _into = "'"+_into+"'"                    
+                    _into = args.get('into', rule.get('into', ''))
+
+                    if not _into.isnumeric():
+                        _into = "'" + _into + "'"
+
                     regex = "".join(regex)
-                    cond += [ " ".join([SYNTAX['IF'],SYNTAX['OPEN'],regex,SYNTAX['THEN'],_into]) ]
-                    # cond += [ " ".join([SYNTAX['IF'],regex])+SYNTAX['OPEN'],SYNTAX['THEN'],_into]
-                    
+                    cond += [" ".join([syntax['IF'], syntax['OPEN'], regex, syntax['THEN'], _into])]
+
                     if rules.index(rule) % 2 == 0 or rules.index(rule) % 3:
-                        cond += [SYNTAX['ELSE']]
-                        
-                    # cond += [_into]
-                    # break
-                    
+                        cond += [syntax['ELSE']]
+
                 else:
                     #
-                    # We are just processing a generalization given a list of values with no overhead of an aggregate function
+                    # We are just processing a generalization given a list of
+                    # values with no overhead of an aggregate function
                     # @TODO: Document what is going on here
-                    #   - We are attempting to have an if or else type of generalization given a list of values or function
-                    #   - IF <filter> IN <values>, THEN <generalized-value> else <attribute>
-                    self.log(module='generalize',label=label.split('.')[1],on=name,type='inline')
-                    key_field = args['key_field'] if 'key_field' in args else name
-                    filter = args['filter'] if 'filter' in args else name
-                    qualifier = rule['qualifier']
-                    values = "('" + "','".join(rule['values']) +"')"                    
-                    statement = " ".join([key_field,qualifier, values])
-                    _into = rule['into'] if 'into' not in args else args['into']
-                    # common = set("0123456789.") & set(_into)
-                    regex = " ".join([filter,qualifier,values])
-                    if not _into.isnumeric() :
-                        _into = "'"+_into+"'"
-                    cond += [ " ".join([SYNTAX['IF'],SYNTAX['OPEN'],regex,SYNTAX['THEN'],_into]) ]
-                    # cond += [ " ".join([SYNTAX['IF'],regex])+SYNTAX['OPEN'],SYNTAX['THEN'],_into]
-                    
+                    #   - We are attempting to have an if or else type of
+                    # generalization given a list of values or function
+                    #   - IF <fillter> IN <values>, THEN <generalized-value> else <attribute>
+                    self.log(module='generalize', label=label.split('.')[1], on=name, type='inline')
+                    fillter = args.get('filter', name)
+                    qualifier = rule.get('qualifier', '')
+                    values = "('" + "','".join(rule.get('values', [])) + "')"
+                    _into = args.get('into', rule.get('into', ''))
+
+                    regex = " ".join([fillter, qualifier, values])
+
+                    if not _into.isnumeric():
+                        _into = "'" + _into + "'"
+
+                    cond += [" ".join([syntax['IF'], syntax['OPEN'], regex, syntax['THEN'], _into])]
+
                     if rules.index(rule) % 2 == 0 or rules.index(rule) % 3:
-                        cond += [SYNTAX['ELSE']]
-                    pass
-        
-               
-            #
+                        cond += [syntax['ELSE']]
+
             # Let's build the syntax here to make it sound for any persistence storage
             cond += [name]
-            cond_counts = sum([1 for xchar in cond if SYNTAX['IF'] in xchar]) 
-            cond += np.repeat(SYNTAX['CLOSE'],cond_counts).tolist()
+            cond_counts = sum([1 for xchar in cond if syntax['IF'] in xchar])
+            cond += np.repeat(syntax['CLOSE'], cond_counts).tolist()
             cond += ['AS', name]
-            # r[name] =  (" " .join(cond))
-            result = {"name":name,"apply":" ".join(cond),"label":label}
-            if 'on' in args :
-                result['on'] = args['on']
+            result = {"name":name, "apply":" ".join(cond), "label":label}
+
+            if 'on' in args:
+                result['on'] = args.get('on', '')
+
             out.append(result)
         #
         # This will return the fields that need generalization as specified.
         #
-        
+
         return out
-            
-            
-        pass
-    def suppress(self,**args):
+
+    def suppress(self, **args):
         """
         We should be able to suppress the columns and/or rows provided specification
+
         NOTE: Non-sensical specs aren't handled for instance
-        
         """
-        
-        rules = args['rules'] if 'rules' in args else {}
-       
-        label  = args['label']
-        fields = args['fields'] if 'fields' in args else []
-        
-        store_id = args['store']
-        APPLY_FN = self.store_syntax[store_id]['apply'] if 'apply' in self.store_syntax[store_id] else {}
-        SYNTAX = self.store_syntax[store_id]['cond_syntax']
-        cond = []
-        rows = {}
-        columns = {}
+
+        rules = args.get('rules', {})
+        label = args.get('label', '')
+        fields = args.get('fields', [])
+
+        store_id = args.get('store', '')
+        APPLY_FN = self.store_syntax.get(store_id, {}).get('apply', {})
         out = []
-        
+
         if fields and 'on' not in args:
             #
             # This applies on a relational table's columns, it is simple we just nullify the fields
             #
-            for name in fields :
-                if not rules :
+            for name in fields:
+                if not rules:
                     #
                     # This scenario, we know the fields upfront and don't have a rule for them
                     # We just need them removed (simple/basic case)
                     #
-                    value = ('NULL AS '+name)if '_id' in name else ("'' AS "+name) #-- This will prevent accidental type changing from STRING TO INTEGER 
-                    out.append({"name":name,"apply":value,"label":label})
-                    self.log(module='suppression',label=label.split('.')[1],type='columns')
+                    #-- This will prevent accidental type changing from STRING TO INTEGER
+                    value = ('NULL AS ' + name) if '_id' in name else ("'' AS " + name)
+                    out.append({"name": name, "apply": value, "label": label})
+                    self.log(module='suppression', label=label.split('.')[1], type='columns')
                 else:
                     #
                     # If we have alist of fields to be removed, The following code will figure out which ones apply
                     # This will apply to all tables that are passed through this engine
                     #
 
-                    for rule in rules :
-                        if 'apply' not in rules :
-                            
-                            if name in rule['values'] :
-                                value = ('NULL AS '+name)if '_id' in name else ("'' AS "+name) #-- This will prevent accidental type changing from STRING TO INTEGER 
-                                out.append({"name":name,"apply":(value),"label":label})
-            self.log(module='suppress',label=label.split('.')[1],on=fields,type='columns')
+                    for rule in rules:
+                        if 'apply' not in rules:
+                            if name in rule.get('values', []):
+                                #-- This will prevent accidental type changing from STRING TO INTEGER
+                                value = ('NULL AS ' + name) if '_id' in name else ("'' AS " + name)
+                                out.append({"name": name, "apply": value, "label": label})
+
+            self.log(module='suppress', label=label.split('.')[1], on=fields, type='columns')
 
         else:
             #
@@ -315,161 +331,137 @@ class deid (Rules):
             #   - filter    as the key field to match the filter
             #   - The values of the filter are provided by the rule
             #
-            # self.log(module='suppress',label=label.split('.')[1],on='*',type='rows')
-            
-            for rule in rules :
-                qualifier = args['qualifier'] if 'qualifier' in args else ''
-                APPLY= {'IN':'NOT IN','=':'<>','NOT IN':'IN','<>':'=','':'IS FALSE','TRUE':'IS FALSE'}
-                
-                if 'apply' in rule and rule['apply'] in APPLY_FN :
-                    
-            
-                    TEMPLATE = self.store_syntax[store_id]['apply'][rule['apply']]            
-                    key_field  = args['filter'] if 'filter' in args else args['on']
-                    expression = TEMPLATE.replace(':VAR',"|".join(rule['values']) ).replace(':FN',rule['apply']).replace(':FIELD', key_field)
-                    self.cache['suppress']['FILTERS'].append({"filter": expression +' '+ qualifier,"label":label})
+
+            for rule in rules:
+                qualifier = args.get('qualifier', '')
+                APPLY = {
+                    'IN': 'NOT IN',
+                    '=': '<>',
+                    'NOT IN': 'IN',
+                    '<>': '=',
+                    '': 'IS FALSE',
+                    'TRUE': 'IS FALSE',
+                }
+
+                application_rule = rule.get('apply', '')
+
+                if application_rule in APPLY_FN:
+                    template = self.store_syntax[store_id]['apply'][rule.get('apply', '')]
+                    key_field = args.get('filter', args.get('on', ''))
+                    expression = template.replace(':VAR', "|".join(rule.get('values', [])))
+                    expression = expression.replace(':FN', rule.get('apply', ''))
+                    expression = expression.replace(':FIELD', key_field)
+                    suppression_exp = {"filter": expression + ' ' + qualifier, "label": label}
                 elif 'on' in args:
                     #
-                    # If we have no application of a function, we will assume an expression of type <attribute> IN <list>
-                    # we have a basic SQL statement here 
+                    # If we have no application of a function, we will assume an
+                    # expression of type <attribute> IN <list>
+                    # we have a basic SQL statement here
                     qualifier = 'IN' if qualifier == '' else qualifier
                     qualifier = APPLY[qualifier]
-                    expression   = " ".join([args['on'],qualifier,"('"+ "','".join(rule['values'])+"')"])
-                    # print expression
-                    self.cache['suppress']['FILTERS'].append({"filter": expression ,"label":label})
-                    # out.append({"filter": expression +' '+ APPLY[qualifier],"label":label})
-                    # self.cache['suppress']['FILTERS'].append({"filter": expression +' '+ APPLY[qualifier],"label":label})
-                
-        
+                    expression = " ".join([args['on'], qualifier, "('" +  "', '".join(rule.get('values', [])) + "')"])
+                    suppression_exp = {"filter": expression, "label": label}
+
+                try:
+                    self.cache['suppress']['FILTERS'].append(suppression_exp)
+                except AttributeError:
+                    current = self.cache.get('suppress', {}).get('FILTERS', [])
+                    self.cache['suppress']['FILTERS'] = [current, suppression_exp]
+                except KeyError:
+                    self.cache['suppress'] = {'FILTERS': [suppression_exp]}
+
         return out
-        
-        
-    def shift(self,**args):
-        #
-        # Shifting will always occur on a column, either the column is specified or is given a field with conditional values
-        #   - simply secified are physical date/datetime columns (nothing special here)
-        #   - But if we are dealing with a meta table, a condition must be provided. {key,value}
-        
-        store_id = args['store']  #if 'store' in args else 'sqlite'
-        label   = args['label']
+
+
+    def shift(self, **args):
+        """
+        Shifting will always occur on a column.
+
+        Either the column is specified or is given a field with conditional values
+           - simply secified are physical date/datetime columns (nothing special here)
+           - But if we are dealing with a meta table, a condition must be provided. {key, value}
+        """
+        label = args.get('label', '')
         #
         # we can not shift dates on records where filters don't apply
         #
-        if not self.cache['suppress']['FILTERS'] :
+        if not self.cache['suppress']['FILTERS']:
             return []
-       
-        SHIFT_CONFIG = self.cache['shift']
-        COND_SYNTAX = self.store_syntax[store_id]['cond_syntax']
-        # SHIFT_DAYS = 'SELECT shift FROM :idataset.deid_map map_user WHERE map_user.person_id = :table.person_id'
-        # SHIFT_DAYS = SHIFT_DAYS.replace(":idataset",self.idataset).replace(":table",self.tablename)
+
         out = []
-        
-        if 'fields' in args :
-            fields = args['fields']
-            
-            for name in fields :
-                rules = args['rules']
-                result = {"apply":rules.replace(':FIELD',name),"label":label,"name":name}
-                if 'on' in args :
-                    result['on'] = args['on']
-                    xchar = ' AS ' if ' AS ' in result['apply'] else ' as '
-                    suffix = xchar +result['apply'].split(xchar)[-1]     
-                              
-                    result['apply'] = ' '.join(['CAST(',result['apply'].replace(suffix,''),'AS STRING ) ',suffix])
-                out.append(result)                
-                
-                break
-        else:
-            
-            key_fields = args['key_field']
-            values = args['values']
-            value_field = args['value_field']
-            #
-            # we are dealing with a meta table here 
-            #
-            pass
+
+        fields = args.get('fields', '')
+
+        for name in fields:
+            rules = args.get('rules', '')
+            result = {"apply": rules.replace(':FIELD', name), "label": label, "name": name}
+            if 'on' in args:
+                result_apply = result.get('apply', '')
+                result['on'] = args.get('on', '')
+                xchar = ' AS ' if ' AS ' in result_apply else ' as '
+                suffix = xchar + result_apply.split(xchar)[-1]
+
+                result['apply'] = ' '.join(['CAST(', result_apply.replace(suffix, ''), 'AS STRING ) ', suffix])
+            out.append(result)
+
+            break
+
         return out
 
-    def compute(self,**args):
+    def compute(self, **args):
         """
         Compute functions are simple applications of aggregate functions on a field (SQL Standard)
-        Additionally we add a value from another table thus an embedded query with a table{key_field,key_value,table,field} as folldows:
+
+        Additionally we add a value from another table thus an embedded query
+        with a table{key_field, key_value, table, field} as follows:
             field       projection of the embedded query
             key_field   field used in the join/filter
             key_value   external field that will hold the value of key_field
             table       external table
         """
-        fields = args['fields'] if 'fields' in args else [args['key_field']]
-        value_field = args['value_field']
-        # r = {'label':args['label']}
-        label = args['label']
+        fields = args.get('fields', [args.get('key_field', '')])
+        value_field = args.get('value_field', '')
+        label = args.get('label', '')
         out = []
-        
-        statement = args['rules'].replace(':FIELD',fields[0]).replace(':value_field',value_field)
-        if 'key_field' in args :
-            statement = statement.replace(':key_field',args['key_field'])
-        if 'table' in args :
-            statement = statement.replace(':table',args['table'])
-        out .append({"apply":statement, "name":fields[0],"label":label})
 
-        # for name in fields :
-        #     if 'from' not in args :
-        #         statement = args['rules'].replace(':FIELD',name)
-        #         if 'key_field' in args :
-        #             statement = statement.replace(':key_field',args['key_field'])
-        #         out.append({"name":name,"apply":statement,"label":label})
-        #     else:
-        #         #
-        #         # @TODO Account for conditions ...
-        #         table = args['from']
-        #         statement = args['rules'].replace(':FIELD',table['field']).replace(':key_field',table['key_field'])
-        #         statement = '(' + statement.replace(':key_value',table['key_value']).replace(':table',table['table']) + ') AS '+name
-        #         out.append({"name":name,"apply":statement,"label":label})
+        statement = args.get('rules', '')
+        statement = statement.replace(':FIELD', fields[0])
+        statement = statement.replace(':value_field', value_field)
+        statement = statement.replace(':key_field', args.get('key_field', ''))
+        statement = statement.replace(':table', args.get('table', ''))
+
+        out.append({"apply": statement, "name": fields[0], "label": label})
+
         return out
-    def apply(self,info,store_id = 'sqlite') :
+
+    def apply(self, info, store_id=None):
         """
         :info    is a specification of a table and the rules associated
         """
+        if store_id is None:
+            store_id = 'sqlite'
+
         out = []
         r = {}
-        ismeta = info['info']['type'] if 'info' in info and 'type' in info['info'] else False
-        for id in ['generalize','compute','suppress','shift'] :
-            
-            if id in info :
-                r =  self.validate(id,info[id])
-                if r :
-                    r = dict(r,**{'ismeta':ismeta})
-                    pointer = r['pointer']
-                    tmp = [pointer(** dict(args,**{"store":store_id})) for args in r['args']]
-                    
-                    if tmp :
-                        for _item in tmp :
-                            if _item :
-                                if type(_item) == dict :
+        ismeta = info.get('info', {}).get('type', False)
+        for rule_id in ['generalize', 'compute', 'suppress', 'shift']:
+
+            if rule_id in info:
+                r = self.validate(rule_id, info[rule_id])
+                if r:
+                    r = dict(r, **{'ismeta': ismeta})
+                    pointer = r.get('pointer', {})
+                    tmp = [pointer(** dict(args, **{"store": store_id})) for args in r.get('args', [])]
+
+                    if tmp:
+                        for _item in tmp:
+                            if _item:
+                                if isinstance(_item, dict):
                                     out.append(_item)
                                 else:
                                     out += _item
-                        
+
         #
         # we should try to consolidate here
-       
+
         return out
-# handler = deid()
-# handler.set('generalize','race',values=['Native','Middle-Eastern'],into='Other',apply='REGEXP')
-# handler.set('generalize','race',values=['Hispanic','Latino'],into='Non Hispanic-Latino',apply='REGEXP', qualifier='IS FALSE')
-# handler.set('suppress','noise',values=['sports','story'],apply='IN')
-
-# handler.set('suppress','demographics',values=['zip'])
-# handler.set('shift','expiration',values=['expiration'],apply='REGEXP',**{"from":{"table":"seed","shift_field":"shift","key_field":"seed.id","value_field":"sample.id"}})
-# # handler.set('generalize','race',aggregate='count(distinct :field) from :dataset.:table where :key_field = :key_value',qualifier='> 1',into='multi-racial')
-# info = {
-# # "generalize":[{"rules":"@generalize.race","into":"race","filter":"key_field"}],
-# # "suppress":[{"rules":"@suppress.noise","fields":["key_field"]},{"fields":['zip','gender']}],
-# # "compute":[{"rules":"@compute.year","fields":["dob"]},{"rules":"@compute.id","fields":["id"],"from":{"table":"seed","field":"alt_id","key_field":"id","key_value":"sample.id"}}],
-# # "shift":[{"fields":['dob'],'into':'date', "from":{"table":"seed","shift_field":"shift","key_field":"seed.id","value_field":"sample.id"}},{"rules":"@shift.expiration" ,"into":"date","fields":['value'],"filter":"observation_source_value"}]
-# }
-
-# print handler.apply({"suppress":[{"rules":"@suppress.demographics","fields":['foo','zoo','zip'],"qualifier":"IN"}]})
-
-# 
-# print handler.get('generalize','race')
