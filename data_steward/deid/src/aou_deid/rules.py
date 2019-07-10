@@ -20,9 +20,16 @@
         We have added this feature as a result of uterly poor designs we have
         encountered that has computed fields stored
 """
+from __future__ import print_function
+
 import numpy as np
 
 from parser import Parse
+
+APPLY = 'apply'
+NAME = 'name'
+LABEL = 'label'
+RULE_TYPES = ['generalize', 'compute', 'suppress', 'shift']
 
 class Rules(object):
     COMPUTE = {
@@ -35,9 +42,8 @@ class Rules(object):
     def __init__(self):
         self.cache = {}
         self.store_syntax = {
-
             "sqlite": {
-                "apply": {
+                APPLY: {
                     "REGEXP": "LOWER(:FIELD) REGEXP LOWER(':VAR')",
                     "COUNT": "SELECT COUNT(DISTINCT :FIELD) FROM :TABLE WHERE :KEY=:VALUE"
                 },
@@ -51,7 +57,7 @@ class Rules(object):
                 "random": "random() % 365 "
             },
             "bigquery": {
-                "apply": {
+                APPLY: {
                     "REGEXP": "REGEXP_CONTAINS (LOWER(:FIELD), LOWER(':VAR'))",
                     "COUNT": "SELECT COUNT (DISTINCT :KEY) FROM :TABLE WHERE :KEY=:VALUE",
                 },
@@ -82,7 +88,7 @@ class Rules(object):
         self.cache['compute'] = Rules.COMPUTE
 
     def set(self, key, rule_id, **args):
-        if key not in ['generalize', 'suppress', 'compute', 'shift']:
+        if key not in RULE_TYPES:
             raise (key + " is Unknown, [suppress, generalize, compute, shift] are allowed")
 
         if key not in self.cache:
@@ -159,7 +165,7 @@ class Deid(Rules):
         pass
 
     def log(self, **args):
-        print (args)
+        print(args)
 
     def generalize(self, **args):
         """
@@ -184,15 +190,15 @@ class Deid(Rules):
             cond = []
             for rule in rules:
                 qualifier = rule.get('qualifier', '')
-                if 'apply' in rule:
+                if APPLY in rule:
                     #
                     # This will call a built-in SQL function (non-aggregate)'
                     # qualifier = rule.get('qualifier', '')
                     fillter = args.get('filter', name)
-                    self.log(module='generalize', label=label.split('.')[1], on=name, type=rule.get('apply', ''))
+                    self.log(module='generalize', label=label.split('.')[1], on=name, type=rule.get(APPLY, ''))
 
-                    if 'apply' not in self.store_syntax[store_id]:
-                        regex = [rule.get('apply', ''),
+                    if APPLY not in self.store_syntax[store_id]:
+                        regex = [rule.get(APPLY, ''),
                                  "(",
                                  fillter,
                                  " , '",
@@ -200,15 +206,15 @@ class Deid(Rules):
                                  "') ",
                                  qualifier]
                     else:
-                        application_rule = rule.get('apply', '')
+                        application_rule = rule.get(APPLY, '')
                         template = self.store_syntax.get(store_id, {})
-                        template = template.get('apply', {})
+                        template = template.get(APPLY, {})
                         template = template.get(application_rule, '')
                         regex = template.replace(':FIELD', fillter)
-                        regex = regex.replace(':FN', rule.get('apply', ''))
+                        regex = regex.replace(':FN', rule.get(APPLY, ''))
                         if ':VAR' in template:
                             regex = regex.replace(":VAR", "|".join(rule.get('values', [])))
-                        if rule.get('apply', '') in ['COUNT', 'AVG', 'SUM']:
+                        if rule.get(APPLY, '') in ['COUNT', 'AVG', 'SUM']:
                             #
                             # We are dealing with an aggregate expression.
                             # At this point it is important to know what we are counting
@@ -265,11 +271,11 @@ class Deid(Rules):
                         cond += [syntax['ELSE']]
 
             # Let's build the syntax here to make it sound for any persistence storage
-            cond += [name]
+            cond.append(name)
             cond_counts = sum([1 for xchar in cond if syntax['IF'] in xchar])
-            cond += np.repeat(syntax['CLOSE'], cond_counts).tolist()
-            cond += ['AS', name]
-            result = {"name":name, "apply":" ".join(cond), "label":label}
+            cond.extend(np.repeat(syntax['CLOSE'], cond_counts).tolist())
+            cond.extend(['AS', name])
+            result = {"name":name, APPLY:" ".join(cond), "label":label}
 
             if 'on' in args:
                 result['on'] = args.get('on', '')
@@ -293,7 +299,7 @@ class Deid(Rules):
         fields = args.get('fields', [])
 
         store_id = args.get('store', '')
-        APPLY_FN = self.store_syntax.get(store_id, {}).get('apply', {})
+        apply_fn = self.store_syntax.get(store_id, {}).get(APPLY, {})
         out = []
 
         if fields and 'on' not in args:
@@ -308,7 +314,7 @@ class Deid(Rules):
                     #
                     #-- This will prevent accidental type changing from STRING TO INTEGER
                     value = ('NULL AS ' + name) if '_id' in name else ("'' AS " + name)
-                    out.append({"name": name, "apply": value, "label": label})
+                    out.append({"name": name, APPLY: value, "label": label})
                     self.log(module='suppression', label=label.split('.')[1], type='columns')
                 else:
                     #
@@ -317,11 +323,11 @@ class Deid(Rules):
                     #
 
                     for rule in rules:
-                        if 'apply' not in rules:
+                        if APPLY not in rules:
                             if name in rule.get('values', []):
                                 #-- This will prevent accidental type changing from STRING TO INTEGER
                                 value = ('NULL AS ' + name) if '_id' in name else ("'' AS " + name)
-                                out.append({"name": name, "apply": value, "label": label})
+                                out.append({"name": name, APPLY: value, "label": label})
 
             self.log(module='suppress', label=label.split('.')[1], on=fields, type='columns')
 
@@ -334,7 +340,7 @@ class Deid(Rules):
 
             for rule in rules:
                 qualifier = args.get('qualifier', '')
-                APPLY = {
+                apply_filter = {
                     'IN': 'NOT IN',
                     '=': '<>',
                     'NOT IN': 'IN',
@@ -343,13 +349,13 @@ class Deid(Rules):
                     'TRUE': 'IS FALSE',
                 }
 
-                application_rule = rule.get('apply', '')
+                application_rule = rule.get(APPLY, '')
 
-                if application_rule in APPLY_FN:
-                    template = self.store_syntax[store_id]['apply'][rule.get('apply', '')]
+                if application_rule in apply_fn:
+                    template = self.store_syntax.get(store_id, {}).get(APPLY, {}).get(application_rule, '')
                     key_field = args.get('filter', args.get('on', ''))
                     expression = template.replace(':VAR', "|".join(rule.get('values', [])))
-                    expression = expression.replace(':FN', rule.get('apply', ''))
+                    expression = expression.replace(':FN', rule.get(APPLY, ''))
                     expression = expression.replace(':FIELD', key_field)
                     suppression_exp = {"filter": expression + ' ' + qualifier, "label": label}
                 elif 'on' in args:
@@ -358,8 +364,8 @@ class Deid(Rules):
                     # expression of type <attribute> IN <list>
                     # we have a basic SQL statement here
                     qualifier = 'IN' if qualifier == '' else qualifier
-                    qualifier = APPLY[qualifier]
-                    expression = " ".join([args['on'], qualifier, "('" +  "', '".join(rule.get('values', [])) + "')"])
+                    qualifier = apply_filter[qualifier]
+                    expression = " ".join([args.get('on', ''), qualifier, "('" +  "', '".join(rule.get('values', [])) + "')"])
                     suppression_exp = {"filter": expression, "label": label}
 
                 try:
@@ -385,7 +391,7 @@ class Deid(Rules):
         #
         # we can not shift dates on records where filters don't apply
         #
-        if not self.cache['suppress']['FILTERS']:
+        if not self.cache.get('suppress', {}).get('FILTERS', []):
             return []
 
         out = []
@@ -394,14 +400,14 @@ class Deid(Rules):
 
         for name in fields:
             rules = args.get('rules', '')
-            result = {"apply": rules.replace(':FIELD', name), "label": label, "name": name}
+            result = {APPLY: rules.replace(':FIELD', name), "label": label, "name": name}
             if 'on' in args:
-                result_apply = result.get('apply', '')
+                result_apply = result.get(APPLY, '')
                 result['on'] = args.get('on', '')
                 xchar = ' AS ' if ' AS ' in result_apply else ' as '
                 suffix = xchar + result_apply.split(xchar)[-1]
 
-                result['apply'] = ' '.join(['CAST(', result_apply.replace(suffix, ''), 'AS STRING ) ', suffix])
+                result[APPLY] = ' '.join(['CAST(', result_apply.replace(suffix, ''), 'AS STRING ) ', suffix])
             out.append(result)
 
             break
@@ -430,7 +436,7 @@ class Deid(Rules):
         statement = statement.replace(':key_field', args.get('key_field', ''))
         statement = statement.replace(':table', args.get('table', ''))
 
-        out.append({"apply": statement, "name": fields[0], "label": label})
+        out.append({APPLY: statement, "name": fields[0], "label": label})
 
         return out
 
@@ -444,7 +450,7 @@ class Deid(Rules):
         out = []
         r = {}
         ismeta = info.get('info', {}).get('type', False)
-        for rule_id in ['generalize', 'compute', 'suppress', 'shift']:
+        for rule_id in RULE_TYPES:
 
             if rule_id in info:
                 r = self.validate(rule_id, info[rule_id])

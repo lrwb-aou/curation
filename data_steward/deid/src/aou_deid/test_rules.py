@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 # third party imports
 from pymongo import MongoClient
 
@@ -5,8 +7,12 @@ from pymongo import MongoClient
 from rules import Deid
 
 
-table = [{"name": "id"}, {"name": "dob"}, {"name": "race"}, {"name": "yob"},
-         {"name": "ethnicity"}, {"name": "gender"}]
+table = [{"name": "id"},
+         {"name": "dob"},
+         {"name": "race"},
+         {"name": "yob"},
+         {"name": "ethnicity"},
+         {"name": "gender"}]
 
 fields = [field['name'] for field in table]
 
@@ -20,7 +26,7 @@ for row in r:
     try:
         del row['_id']
     except KeyError:
-        print "'_id' doesn't exist for row"
+        print("Key '_id' doesn't exist for row")
 
     cache[row_id] = row
 
@@ -35,4 +41,4 @@ info = {
          "from": {"table": "seed", "field": "alt_id", "key_field": "id", "key_value": "sample.id"}},
     ],
 }
-print drules.apply(info)
+print(drules.apply(info))

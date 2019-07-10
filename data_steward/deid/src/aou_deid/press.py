@@ -1,6 +1,8 @@
 """
 This class applies rules and meta data to yield a certain output
 """
+from __future__ import print_function
+
 from datetime import datetime
 import json
 import os
@@ -30,10 +32,12 @@ class Press(object):
 
         if isinstance(self.deid_rules, list):
             cache = {}
+
             for row in self.deid_rules:
                 _id = row.get('_id', '')
                 cache[_id] = row
             self.deid_rules = cache
+
         self.idataset = args.get('idataset', '')
         self.tablename = args.get('table', '')
         self.tablename = self.tablename.split(os.sep)[-1].replace('.json', '').strip()
@@ -58,7 +62,7 @@ class Press(object):
         # Let us update and see if the default filters apply at all
         dfilters = []
         columns = self.get(limit=1).columns.tolist()
-        deid_filters = self.deid_ruls.get('suppress', {}).get('FILTERS', [])
+        deid_filters = self.deid_rules.get('suppress', {}).get('FILTERS', [])
         for row in deid_filters:
             # should this be the boolean 'and' or is the bit-wise '&' actually wanted
             if set(columns) & set(row.get('filter', '').split(' ')):
@@ -69,9 +73,9 @@ class Press(object):
         """
         This function will execute an SQL statement and return the meta data for a given table
         """
-        return None
+        raise NotImplementedError
 
-    def submit(self):
+    def submit(self, sql):
         """
         Base class submit method.
 
@@ -156,9 +160,9 @@ class Press(object):
 
     def debug(self, info):
         for row in info:
-            print()
+            print('')
             print(row.get('label', ''), not row.get('apply'))
-            print()
+            print('')
 
     def log(self, **args):
         print(args)
@@ -296,16 +300,20 @@ class Press(object):
 
         sql = ['SELECT', ",".join(fields), 'FROM ', table_name]
 
-        if 'suppress' in self.deid_rules and 'FILTERS' in self.deid_rules['suppress']:
-            deid_filters = self.deid_rules['suppress']['FILTERS']
-            if deid_filters:
-                sql.append('WHERE')
+        deid_filters = self.deid_rules.get('suppress', {}).get('FILTERS', [])
+
+        if deid_filters:
+            sql.append('WHERE')
+
             for row in deid_filters:
-                if not (set(columns) & set(row.get('filter', '').split(' '))):
+                # should this be a boolean AND rather than a bitwise &
+                row_filter = row.get('filter', '')
+                if not (set(columns) & set(row_filter.split(' '))):
                     continue
-                sql.append(row.get('filter', ''))
+                sql.append(row_filter)
                 if deid_filters.index(row) < len(deid_filters) - 1:
-                    sql.append('AND')
+                    sql.append(' AND ')
+
         return '\t'.join(sql).replace(":idataset", self.idataset)
 
     def to_pandas(self, rules, info):

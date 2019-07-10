@@ -31,12 +31,12 @@ class Parse(object):
         label = ".".join([_id, _key]) if _key else rule_id
 
         p = {'label': label}
-        
+
         if _id and _key  and _id in cache and _key in cache[_id]:
             p['rules'] = cache[_id][_key]
 
         for key in row:
-            p[key] = row[key] if key not in p else p[key]
+            p[key] = p.get(key, row.get(key, ''))
 
         return p
 
@@ -66,27 +66,30 @@ class Parse(object):
 
     @staticmethod
     def sys_args():
-        SYS_ARGS = {}
+        sys_args = {}
         if len(sys.argv) > 1:
 
-            N = len(sys.argv)
-            for i in range(1, N):
+            len_args = len(sys.argv)
+            for i in range(1, len_args):
                 value = None
                 if sys.argv[i].startswith('--'):
                     key = sys.argv[i].replace('-', '')
-                    SYS_ARGS[key] = 1
+                    sys_args[key] = 1
 
-                    if i + 1 < N and sys.argv[i + 1].startswith('--') is False:
+                    if i + 1 < len_args and sys.argv[i + 1].startswith('--') is False:
                         value = sys.argv[i + 1] = sys.argv[i + 1].strip()
 
                     if key and value:
-                        SYS_ARGS[key] = value
+                        sys_args[key] = value
 
                 i += 2
-        return SYS_ARGS
+        return sys_args
 
 
 def parse_args():
+    """
+    Standard python command line argument parsing.
+    """
     parser = ArgumentParser(description='Parse deid command line arguments')
     parser.add_argument('--rules',
                         action='store', dest='rules',
@@ -108,7 +111,7 @@ def parse_args():
                               'output table\nsubmit: create an output table\n'
                               'debug: print output without simulation or submit '
                               '(runs alone)')
-                        )
+                       )
     parser.add_argument('--cluster', dest='cluster', action='store_true',
                         help='Enable clustering on person_id')
     parser.add_argument('--log', dest='log', action='store',

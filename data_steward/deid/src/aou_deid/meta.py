@@ -19,8 +19,8 @@ class Meta(object):
         :path   path of the sqlite file
         :table  name of the table
         """
-        path = args['path']
-        table = args['table']
+        path = args.get('path', '')
+        table = args.get('table', '')
         conn = sqlite3.connect(path)
         sql = " ".join(["SELECT * FROM ", table, "LIMIT 10"])
         data_frame = pd.read_sql_query(sql, conn)
