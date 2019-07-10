@@ -131,8 +131,15 @@ class AOU(Press):
         map_table = pd.DataFrame()
         if person_table.shape[0] > 0:
             person_table = person_table[person_table.age < age_limit]
-            map_table = self.get(sql="SELECT * FROM " + map_tablename)
-            if map_table.shape[0] > 0 and map_table.shape[0] == person_table.shape[0]:
+
+            try:
+                map_table = self.get(sql="SELECT * FROM " + map_tablename)
+            except Exception as exc:
+                # should be using python's logging and exception handling for printing
+                print("Unable to select using the sql:\n{}\nexception:\n{}\n".format(sql, exc))
+                map_table = pd.DataFrame()
+
+            if map_table.shape[0] and map_table.shape[0] == person_table.shape[0]:
                 #
                 # There is nothing to be done here
                 # @TODO: This weak post-condition is not enough nor consistent
@@ -348,4 +355,4 @@ if __name__ == '__main__':
         HANDLE.do()
     else:
         print("Unable to initialize process ")
-        print("\tInsure that the parameters are correct")
+        print("\tEnsure that the parameters are correct")

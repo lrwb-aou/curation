@@ -89,6 +89,10 @@ class Parse(object):
 def parse_args():
     """
     Standard python command line argument parsing.
+
+    This is preferable to defining your own command line parser because it
+    already contains checks and other type information. This one will work, but
+    has not yet been integrated.
     """
     parser = ArgumentParser(description='Parse deid command line arguments')
     parser.add_argument('--rules',

@@ -147,7 +147,6 @@ class Deid(Rules):
         payload = None
 
         if super(Deid, self).validate(rule_id, entry):
-
             payload = {}
             payload = {"args": []}
             payload["pointer"] = getattr(self, rule_id)
@@ -186,6 +185,7 @@ class Deid(Rules):
         syntax = self.store_syntax.get(store_id, 'sqlite').get('cond_syntax', {})
         out = []
         label = args.get('label', '')
+
         for name in fields:
             cond = []
             for rule in rules:
@@ -287,13 +287,20 @@ class Deid(Rules):
 
         return out
 
+    def _suppress_field(self, rules, name, out):
+        if APPLY not in rules:
+            if name in self.cache.get('values', []):
+                #-- This will prevent accidental type changing from STRING TO INTEGER
+                value = ('NULL AS ' + name) if '_id' in name else ("'' AS " + name)
+                out.append({"name": name, APPLY: value, "label": label})
+        return out
+
     def suppress(self, **args):
         """
         We should be able to suppress the columns and/or rows provided specification
 
         NOTE: Non-sensical specs aren't handled for instance
         """
-
         rules = args.get('rules', {})
         label = args.get('label', '')
         fields = args.get('fields', [])
@@ -322,14 +329,16 @@ class Deid(Rules):
                     # This will apply to all tables that are passed through this engine
                     #
 
-                    for rule in rules:
-                        if APPLY not in rules:
-                            if name in rule.get('values', []):
-                                #-- This will prevent accidental type changing from STRING TO INTEGER
-                                value = ('NULL AS ' + name) if '_id' in name else ("'' AS " + name)
-                                out.append({"name": name, APPLY: value, "label": label})
+                    if isinstance(rules, list):
+                        for rule in rules:
+                            out = self._suppress_field(rule, name, out)
+                    else:
+                        out = self._suppress_field(rules, name, out)
 
-            self.log(module='suppress', label=label.split('.')[1], on=fields, type='columns')
+            try:
+                self.log(module='suppress', label=label.split('.')[1], on=fields, type='columns')
+            except IndexError:
+                self.log(module='suppress', label=label, on=fields, type='columns')
 
         else:
             #
@@ -458,16 +467,16 @@ class Deid(Rules):
                     r = dict(r, **{'ismeta': ismeta})
                     pointer = r.get('pointer', {})
                     tmp = [pointer(** dict(args, **{"store": store_id})) for args in r.get('args', [])]
-
                     if tmp:
                         for _item in tmp:
                             if _item:
                                 if isinstance(_item, dict):
                                     out.append(_item)
+                                elif isinstance(_item, list):
+                                    out.extend(_item)
                                 else:
                                     out += _item
 
         #
         # we should try to consolidate here
-
         return out

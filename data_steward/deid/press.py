@@ -98,7 +98,6 @@ class Press(object):
         self.update_rules()
         d = Deid()
         d.cache = self.deid_rules
-
         _info = self.info
 
         p = d.apply(_info, self.store)
@@ -180,6 +179,7 @@ class Press(object):
         """
         table_name = self.idataset + "." + self.tablename
         deid_filters = self.deid_rules.get('suppress', {}).get('FILTERS', [])
+        self.log(module='simulation', table=table_name, status='started', value='')
         out = pd.DataFrame()
         counts = {}
         dirty_date = False
@@ -240,7 +240,7 @@ class Press(object):
         rdf = pd.DataFrame()
         if deid_filters:
             extra_filters = [item['filter'] for item in deid_filters if 'filter' in item]
-            filters.append(extra_filters)
+            filters.extend(extra_filters)
             original_sql = ' (SELECT COUNT(*) as original FROM {table}) AS ORIGINAL_TABLE ,'.format(table=table_name)
             transformed_sql = (
                 '(SELECT COUNT(*) AS transformed FROM {table} WHERE {filters}) AS TRANSF_TABLE'
