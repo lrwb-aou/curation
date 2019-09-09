@@ -21,10 +21,9 @@ class Press(object):
         """
         self.deid_rules = json.loads((open(args['rules'])).read())
         self.pipeline = args['pipeline']
-        if os.path.exists(args['table']):
+        try:
             self.info = json.loads((open(args['table'])).read())
-        else:
-            #
+        except StandardError:
             # In case a table name is not provided, we will apply default rules on he table
             #   I.e physical field suppression and row filter
             #   Date Shifting
@@ -40,8 +39,7 @@ class Press(object):
         self.idataset = args['idataset']
         self.tablename = args['table']
 
-        if os.sep in self.tablename:
-            self.tablename = self.tablename.split(os.sep)[-1].replace('.json', '').strip()
+        self.tablename = os.path.basename(self.tablename).split('.json')[0].strip()
 
         self.store = 'sqlite' if 'store' not in args else args['store']
 
@@ -51,7 +49,7 @@ class Press(object):
         if 'FILTERS' not in self.deid_rules['suppress']:
             self.deid_rules['suppress']['FILTERS'] = []
 
-        self.logpath = 'logs' if 'logs' not in args else args['logs']
+        self.logpath = args.get('logs', 'logs')
         self.action = [term.strip()
                        for term in args['action'].split(',')] if 'action' in args else ['submit']
 
@@ -130,7 +128,7 @@ class Press(object):
             for filter_id in _map:
 
                 _item = _map[filter_id]
-                fillter += [filter_id]
+                fillter.append(filter_id)
 
                 _sql = self.to_sql(_item +relational_cols)  + ' AND ' + filter_id
 
@@ -143,7 +141,7 @@ class Press(object):
             # @TODO: filters may need to be adjusted (add a conditional statement)
             #
 
-            sql += [_rsql]
+            sql.append(_rsql)
             sql = "\nUNION ALL\n".join(sql)
             sql = sql.replace(':idataset', self.idataset)
 
@@ -221,10 +219,12 @@ class Press(object):
                         sql_list.append('AND')
 
             if 'on' in item:
-                #
                 # This applies to meta tables
-                filters += [item['on']]
-                sql_list += ['AND', item['on']] if suppression_filters else ['WHERE ', item['on']]
+                filters.append(item['on'])
+                if suppression_filters:
+                    sql_list.extend(['AND', item['on']])
+                else:
+                    sql_list.extend(['WHERE ', item['on']])
 
             if 'shift' in labels:
                 data_frame = self.get(sql=" ".join(sql_list).replace(':idataset', self.idataset), limit=5)
