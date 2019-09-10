@@ -18,7 +18,7 @@ ACHILLES_HEEL_RESULTS_NOTIFICATION_COUNT = 5
 ACHILLES_RESULTS_DERIVED_COUNT = 282
 BQ_TIMEOUT_RETRIES = 3
 
-
+@unittest.skip("Skipping AchillesHeelTest class")
 class AchillesHeelTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

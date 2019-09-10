@@ -14,6 +14,7 @@ from validation import export, main
 BQ_TIMEOUT_RETRIES = 3
 
 
+@unittest.skip("Skipping ExportTest class")
 class ExportTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

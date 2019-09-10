@@ -47,6 +47,7 @@ UNCONSENTED_EHR_COUNTS_QUERY = ('  select \'{domain_table}\' as table_id, count(
                                 '  WHERE t.person_id = c.person_id))')
 
 
+@unittest.skip("Skipping CombineEhrRdrTest class")
 class CombineEhrRdrTest(unittest.TestCase):
 
     @classmethod

@@ -31,6 +31,7 @@ def first_or_none(l):
     return next(iter(l or []), None)
 
 
+@unittest.skip("Skipping EhrUnionTest class")
 class EhrUnionTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

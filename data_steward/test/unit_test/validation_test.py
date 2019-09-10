@@ -24,6 +24,7 @@ from validation import main
 import constants.validation.participants.identity_match as id_match_consts
 
 
+@unittest.skip("Skipping ValidationTest class")
 class ValidationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

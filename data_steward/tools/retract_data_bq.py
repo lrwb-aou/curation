@@ -14,7 +14,7 @@ from validation import ehr_union
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('Data retraction logger')
-# logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.DEBUG)
 
 UNIONED_REGEX = re.compile('unioned_ehr_?\d{6}')
 COMBINED_REGEX = re.compile('combined\d{6}')
