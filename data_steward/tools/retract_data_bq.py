@@ -607,6 +607,8 @@ def is_unioned_dataset(dataset_id):
 
 
 def is_ehr_dataset(dataset_id):
+    logger.debug('dataset_id is: %s', dataset_id)
+    logger.debug('bq_utils.get_dataset_id():  %s', bq_utils.get_dataset_id())
     return bool(re.match(EHR_REGEX, dataset_id)) or dataset_id == bq_utils.get_dataset_id()
 
 
