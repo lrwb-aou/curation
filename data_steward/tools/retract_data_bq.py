@@ -607,8 +607,8 @@ def is_unioned_dataset(dataset_id):
 
 
 def is_ehr_dataset(dataset_id):
-    logger.debug('dataset_id is: %s', dataset_id)
-    logger.debug('bq_utils.get_dataset_id():  %s', bq_utils.get_dataset_id())
+    print ('dataset_id is: %s', dataset_id)
+    print ('bq_utils.get_dataset_id():  %s', bq_utils.get_dataset_id())
     return bool(re.match(EHR_REGEX, dataset_id)) or dataset_id == bq_utils.get_dataset_id()
 
 
@@ -639,6 +639,7 @@ def run_retraction(project_id, pids, hpo_id, deid_flag=False):
     combined_datasets = []
     unioned_datasets = []
     ehr_datasets = []
+    print 'dataset_ids:  {}'.format(dataset_ids)
     for dataset in dataset_ids:
         if is_deid_dataset(dataset):
             deid_datasets.append(dataset)
@@ -648,6 +649,11 @@ def run_retraction(project_id, pids, hpo_id, deid_flag=False):
             unioned_datasets.append(dataset)
         elif is_ehr_dataset(dataset):
             ehr_datasets.append(dataset)
+
+    print 'deid_datasets: {}'.format(deid_datasets)
+    print 'combined_datasets: {}'.format(combined_datasets)
+    print 'unioned_datasets: {}'.format(unioned_datasets)
+    print 'ehr_datasets: {}'.format(ehr_datasets)
 
     if deid_flag:
         logger.debug('Retracting from DEID datasets: %s' % ', '.join(deid_datasets))
