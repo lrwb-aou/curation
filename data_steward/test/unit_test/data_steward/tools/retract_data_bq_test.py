@@ -171,6 +171,7 @@ class RetractDataBqTest(unittest.TestCase):
     @mock.patch('tools.retract_data_bq.is_ehr_dataset')
     @mock.patch('bq_utils.list_datasets')
     def test_integration_queries_to_retract_from_fake_dataset(self, mock_list_datasets, mock_is_ehr_dataset):
+        print '{}:{}'.format(self.project_id, self.bq_dataset_id)
         mock_list_datasets.return_value = [{'id': self.project_id+':'+self.bq_dataset_id}]
         mock_is_ehr_dataset.return_value = True
 
@@ -223,7 +224,12 @@ class RetractDataBqTest(unittest.TestCase):
         row_count_after_retraction = {}
         for row in result:
             row_count_after_retraction[row['table_id']] = row['row_count']
+
+        for table, count in expected_row_count.iteritems():
+            print '{}\t\t{}'.format(table, count)
+
         for table in expected_row_count:
+            print 'table:  {}\nexpected_row_count:  {}\nrow_count_before_retraction: {}\nrow_count_after_retraction: {}'.format(table, expected_row_count[table], row_count_before_retraction[table], row_count_after_retraction[table])
             self.assertEqual(expected_row_count[table],
                              row_count_before_retraction[table] - row_count_after_retraction[table])
 
