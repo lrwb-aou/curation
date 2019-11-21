@@ -50,9 +50,9 @@ if [[ "$subset" == "all" || "$subset" == "unit" ]];
 then
   if [[ -z ${substring} ]]
   then
-    cmd="test/runner.py --test-path test/unit_test/ "
+    cmd="tests/runner.py --test-path tests/unit_test/ ${sdk_dir}"
   else
-    cmd="test/runner.py --test-path test/unit_test/ --test-pattern $substring"
+    cmd="tests/runner.py --test-path tests/unit_test/ ${sdk_dir} --test-pattern $substring"
   fi
   (cd ${BASE_DIR}; python ${cmd})
 fi
