@@ -1,14 +1,18 @@
+# Python imports
 import os
 import unittest
 
-import app_identity
+# Third party imports
+from google.appengine.ext import testbed
+
+# Project imports
 import bq_utils
 import common
 import gcs_utils
 import resources
-from test.unit_test import test_util
-from tools.top_heel_errors import top_heel_errors, RESULT_LIMIT, FIELD_ANALYSIS_ID, FIELD_RECORD_COUNT, \
-    FIELD_DATASET_NAME, FIELD_ACHILLES_HEEL_WARNING
+from tools.top_heel_errors import (top_heel_errors, RESULT_LIMIT, FIELD_ANALYSIS_ID, FIELD_RECORD_COUNT,
+    FIELD_DATASET_NAME, FIELD_ACHILLES_HEEL_WARNING)
+import tests.test_util as test_util
 
 HPO_NYC = 'nyc_cu'
 HPO_PITT = 'pitt'
