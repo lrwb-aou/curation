@@ -59,6 +59,9 @@ jobs:
       - run:
           name: Show bashrc file
           command: cat ${BASH_ENV}
+      - run:
+          name: Show environment variables.
+          command: env
       # Test
       #   This would typically be a build job when using workflows, possibly combined with build
       - run:
