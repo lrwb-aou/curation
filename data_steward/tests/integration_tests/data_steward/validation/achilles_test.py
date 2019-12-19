@@ -1,6 +1,12 @@
 import os
 import unittest
 
+import google
+google_path = google.__path__._path[0]
+print(google_path)
+print('==================================================')
+print(os.listdir(google_path))
+print('==================================================')
 from google.appengine.ext import testbed
 
 import bq_utils
