@@ -46,19 +46,14 @@ then
    echo Executing tests that match glob ${substring}
 fi
 
-if [[ "$subset" == "all" ]];
-then
-  path="tests/"
-fi
-
-if [[ "$subset" == "unit" ]];
+if [[ "$subset" == "unit" ]]
 then
   path="tests/unit_tests/"
-fi
-
-if [[ "$subset" == "integration" ]];
+elif [[ "$subset" == "integration" ]]
 then
   path="tests/integration_tests/"
+else
+  path="tests/"
 fi
 
 if [[ -z ${substring} ]]
@@ -67,5 +62,7 @@ then
 else
   cmd="tests/runner.py --test-path ${path} ${sdk_dir} --test-pattern $substring"
 fi
+
+echo "PYTHONPATH=.:${PYTHONPATH} python ${cmd}"
 (cd ${BASE_DIR}; python ${cmd})
 
