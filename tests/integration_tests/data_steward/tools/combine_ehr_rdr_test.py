@@ -24,6 +24,7 @@ UNCONSENTED_EHR_COUNTS_QUERY = ('  select \'{domain_table}\' as table_id, count(
                                 '  (SELECT 1 FROM {ehr_rdr_dataset_id}.{ehr_consent_table_id} c'
                                 '  WHERE t.person_id = c.person_id))')
 
+@unittest.skip('Skipping during development')
 class CombineEhrRdrTest(unittest.TestCase):
 
     @classmethod
