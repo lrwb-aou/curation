@@ -67,10 +67,11 @@ jobs:
       - run:
           name: Run unit tests
           command: |
-            mkdir -p test_results/coverage/xml
-            mkdir -p test_results/coverage/html
-            mkdir -p test_results/junit
-            ./tests/run_tests.sh -s unit
+            mkdir -p test_results/coverage/unit/xml
+            mkdir -p test_results/coverage/unit/html
+            mkdir -p test_results/junit/unit
+            PYTHONPATH=.:$PYTHONPATH python tests/runner.py --test-path tests/unit_tests --coverage-file ../.coveragerc_unit
+            #./tests/run_tests.sh -s unit
           no_output_timeout: 300s
           when:  always
       - run:
@@ -79,7 +80,11 @@ jobs:
             t=$(git log -1 --pretty=%B)
             if [[ "$t" == *"all tests"* ]] || [[ ! -z "${CIRCLE_PULL_REQUEST}" ]] || [[ ! -z "${CIRCLE_PULL_REQUESTS}" ]];
             then
-                ./tests/run_tests.sh -s integration
+                mkdir -p test_results/coverage/integration/xml
+                mkdir -p test_results/coverage/integration/html
+                mkdir -p test_results/junit/integration
+                PYTHONPATH=.:$PYTHONPATH python tests/runner.py --test-path tests/integration_tests --coverage-file ../.coveragerc_integration
+                #./tests/run_tests.sh -s integration
             else
                 echo "Skipping integration tests"
             fi
@@ -89,5 +94,5 @@ jobs:
           path: ~/curation/data_steward/test_results/junit
       # Save artifacts
       - store_artifacts:
-          path: ~/curation/data_steward/test_results
+          path: ~/curation/data_steward/test_results/coverage
           destination: test_results
